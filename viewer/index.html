@@ -432,46 +432,71 @@
       if (name && screens[name]) screens[name].classList.add('active');
     }
 
+    // ─── World Storage (localStorage) ───
+    const WORLDS_KEY = 'field-shooter-worlds';
+
+    function getSavedWorlds() {
+      try { return JSON.parse(localStorage.getItem(WORLDS_KEY)) || {}; }
+      catch { return {}; }
+    }
+    function saveWorld(id, meta) {
+      const w = getSavedWorlds();
+      w[id] = meta;
+      localStorage.setItem(WORLDS_KEY, JSON.stringify(w));
+    }
+    function getWorld(id) {
+      return getSavedWorlds()[id] || null;
+    }
+
+    async function seedWorlds() {
+      const existing = getSavedWorlds();
+      if (Object.keys(existing).length > 0) return;
+      try {
+        const resp = await fetch('/worlds-seed.json');
+        const seeds = await resp.json();
+        for (const [id, meta] of Object.entries(seeds)) {
+          saveWorld(id, meta);
+        }
+      } catch (e) {}
+    }
+
     // ─── Load saved worlds ───
     const worldsGrid = document.getElementById('worlds-grid');
 
     async function loadSavedWorlds() {
-      try {
-        const res = await fetch('/api/worlds');
-        const worlds = await res.json();
-        if (worlds.length === 0) {
-          worldsGrid.innerHTML = '<div class="no-worlds">No saved worlds yet</div>';
-          return;
-        }
-        worldsGrid.innerHTML = '';
-        for (const w of worlds) {
-          const meta = await fetch(`/worlds/${w.id}/metadata.json`).then(r => r.json()).catch(() => null);
-          const card = document.createElement('div');
-          card.className = 'world-card';
-          const name = meta?.response?.display_name || w.id.slice(0, 8);
-          const thumbUrl = `/worlds/${w.id}/thumbnail.webp`;
-          const caption = meta?.response?.assets?.caption || '';
-          const shortCaption = caption.length > 60 ? caption.slice(0, 60) + '...' : caption;
-          card.innerHTML = `
-            <img src="${thumbUrl}" alt="${name}" onerror="this.style.background='#222'">
-            <div class="card-body">
-              <div class="card-name" title="${name}">${name}</div>
-              <div class="card-date" title="${shortCaption}">${shortCaption || w.id.slice(0, 8)}</div>
-            </div>
-          `;
-          card.addEventListener('click', () => playExistingWorld(w.id));
-          worldsGrid.appendChild(card);
-        }
-      } catch (e) {
-        worldsGrid.innerHTML = '<div class="no-worlds">Failed to load worlds</div>';
+      await seedWorlds();
+      const worlds = getSavedWorlds();
+      const ids = Object.keys(worlds);
+      if (ids.length === 0) {
+        worldsGrid.innerHTML = '<div class="no-worlds">No saved worlds yet</div>';
+        return;
+      }
+      worldsGrid.innerHTML = '';
+      for (const id of ids) {
+        const w = worlds[id];
+        const card = document.createElement('div');
+        card.className = 'world-card';
+        const thumbUrl = w.thumbnail_url || '';
+        const name = w.display_name || id.slice(0, 8);
+        const caption = w.caption || '';
+        const shortCaption = caption.length > 60 ? caption.slice(0, 60) + '...' : caption;
+        card.innerHTML = `
+          <img src="${thumbUrl}" alt="${name}" crossorigin="anonymous" onerror="this.style.background='#222'">
+          <div class="card-body">
+            <div class="card-name" title="${name}">${name}</div>
+            <div class="card-date" title="${shortCaption}">${shortCaption || id.slice(0, 8)}</div>
+          </div>
+        `;
+        card.addEventListener('click', () => playExistingWorld(id));
+        worldsGrid.appendChild(card);
       }
     }
 
     async function playExistingWorld(worldId) {
       currentWorldId = worldId;
       horrorPhase = 0;
+      const meta = getWorld(worldId);
 
-      // Reset generating screen to peaceful
       genScreen.classList.remove('horror');
       genTitle.textContent = 'Opening your memory...';
       genTitle.classList.remove('gen-glitch');
@@ -483,31 +508,27 @@
       genStatus.style.color = '';
       genProgressFill.style.width = '0%';
 
-      // Show thumbnail as center photo
-      genPhoto.src = `/worlds/${worldId}/thumbnail.webp`;
+      genPhoto.src = meta?.thumbnail_url || '';
+      genPhoto.crossOrigin = 'anonymous';
       genPhotoWrap.classList.add('show');
       genPhotoWrap.classList.remove('horror');
 
       showScreen('generating');
 
-      // Peaceful phase - admiring the photo
       await new Promise(r => setTimeout(r, 800));
       genProgressFill.style.width = '30%';
       genStatus.textContent = 'What a beautiful memory...';
       await new Promise(r => setTimeout(r, 2000));
 
-      // Uneasy
       genProgressFill.style.width = '50%';
       setHorrorPhase(1);
       genStatus.textContent = 'Wait...';
       await new Promise(r => setTimeout(r, 1500));
 
-      // Glitch
       setHorrorPhase(2);
       genProgressFill.style.width = '70%';
       await new Promise(r => setTimeout(r, 1200));
 
-      // Horror - darken photo, reveal ghost
       setHorrorPhase(3);
       genPhotoWrap.classList.add('horror');
       genProgressFill.style.width = '90%';
@@ -668,6 +689,20 @@
       }
     }
 
+    // ─── World Labs API helpers ───
+    async function wlPost(path, body) {
+      const res = await fetch(`/api/worldlabs?path=${encodeURIComponent(path)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      return res.json();
+    }
+    async function wlGet(path) {
+      const res = await fetch(`/api/worldlabs?path=${encodeURIComponent(path)}`);
+      return res.json();
+    }
+
     async function startGeneration() {
       if (!selectedFile) return;
       horrorPhase = 0;
@@ -680,7 +715,6 @@
       genHorrorText.textContent = '';
       genHorrorText.classList.remove('visible');
 
-      // Show uploaded image
       genPhoto.src = URL.createObjectURL(selectedFile);
       genPhotoWrap.classList.add('show');
       genPhotoWrap.classList.remove('horror');
@@ -691,62 +725,70 @@
       genProgressFill.style.width = '5%';
 
       try {
+        const ext = selectedFile.name.split('.').pop().toLowerCase();
+        const displayName = selectedFile.name.replace(/\.[^.]+$/, '');
+
+        // 1. Prepare upload
+        const prepareData = await wlPost('media-assets:prepare_upload', {
+          file_name: selectedFile.name,
+          kind: 'image',
+          extension: ext,
+        });
+        const uploadUrl = prepareData.upload_info.upload_url;
+        const uploadHeaders = prepareData.upload_info.required_headers;
+        const mediaAssetId = prepareData.media_asset.media_asset_id;
+
+        // 2. Upload to GCS directly
+        genStatus.textContent = 'Uploading your photo...';
+        genProgressFill.style.width = '10%';
         const buf = await selectedFile.arrayBuffer();
-        const uploadRes = await fetch('/api/upload', {
-          method: 'POST',
-          headers: { 'X-Filename': selectedFile.name },
+        await fetch(uploadUrl, {
+          method: 'PUT',
+          headers: uploadHeaders,
           body: buf,
         });
-        const uploadData = await uploadRes.json();
 
+        // 3. Start generation
         genStatus.textContent = 'Preparing your memory...';
-        genProgressFill.style.width = '10%';
-
-        const genRes = await fetch('/api/generate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            upload_id: uploadData.upload_id,
-            ext: uploadData.ext,
-            display_name: selectedFile.name.replace(/\.[^.]+$/, ''),
-          }),
+        genProgressFill.style.width = '15%';
+        const genData = await wlPost('worlds:generate', {
+          display_name: displayName,
+          world_prompt: {
+            type: 'image',
+            image_prompt: { source: 'media_asset', media_asset_id: mediaAssetId },
+            text_prompt: '',
+          },
         });
-        const genData = await genRes.json();
 
-        await pollGeneration(genData.gen_id);
+        if (!genData.operation_id) throw new Error('Failed to start generation');
+
+        // 4. Poll World Labs directly
+        await pollGeneration(genData.operation_id, displayName);
       } catch (err) {
         genStatus.textContent = `Error: ${err.message}`;
         genProgressFill.style.width = '0%';
       }
     }
 
-    const STATUS_PROGRESS = {
-      starting: 10, uploading: 20, generating: 35, polling: 45, downloading: 85, done: 100,
-    };
-    const STATUS_TEXT_PEACEFUL = {
-      starting: 'Getting things ready...',
-      uploading: 'Uploading your photo...',
-      generating: 'Building your memory world...',
-      polling: 'Adding the finishing touches...',
-      downloading: 'Almost done...',
-      done: 'Done!',
-    };
-
     let pollCount = 0;
 
-    async function pollGeneration(genId) {
+    async function pollGeneration(operationId, displayName) {
       pollCount = 0;
       while (true) {
-        const res = await fetch(`/api/generate/${genId}`);
-        const data = await res.json();
+        const data = await wlGet(`operations/${operationId}`);
         pollCount++;
 
-        const pct = STATUS_PROGRESS[data.status] || 10;
-        genProgressFill.style.width = `${pct}%`;
+        const done = data.done || false;
+        const metadata = data.metadata || {};
+        const progress = metadata.progress || {};
+        const status = progress.status || 'UNKNOWN';
 
-        // Phase transitions based on poll count (~3s each)
+        const pctMap = { UNKNOWN: 20, IN_PROGRESS: 45, SUCCEEDED: 100 };
+        genProgressFill.style.width = `${pctMap[status] || 20}%`;
+
         if (pollCount <= 20) {
-          genStatus.textContent = STATUS_TEXT_PEACEFUL[data.status] || data.status;
+          const textMap = { UNKNOWN: 'Building your memory world...', IN_PROGRESS: 'Adding the finishing touches...' };
+          genStatus.textContent = textMap[status] || 'Working on it...';
         }
         if (pollCount === 20) setHorrorPhase(1);
         if (pollCount === 30) { setHorrorPhase(2); showNextHorrorMessage(); }
@@ -754,12 +796,23 @@
         if (pollCount === 40) { setHorrorPhase(3); showNextHorrorMessage(); genPhotoWrap.classList.add('horror'); }
         if (pollCount > 40 && pollCount % 5 === 0) showNextHorrorMessage();
 
-        if (horrorPhase >= 2) {
-          genLog.textContent = '';
-        }
+        if (horrorPhase >= 2) genLog.textContent = '';
 
-        if (data.status === 'done' && data.world_id) {
-          currentWorldId = data.world_id;
+        if (done && !data.error) {
+          const worldId = metadata.world_id;
+          const resp = data.response || {};
+          const assets = resp.assets || {};
+
+          // Save to localStorage
+          saveWorld(worldId, {
+            display_name: displayName || worldId.slice(0, 8),
+            spz_url: assets.splats?.spz_urls?.full_res || '',
+            thumbnail_url: assets.thumbnail_url || '',
+            caption: (assets.caption || '').slice(0, 100),
+            marble_url: resp.world_marble_url || '',
+          });
+
+          currentWorldId = worldId;
           if (horrorPhase < 3) setHorrorPhase(3);
           genPhotoWrap.classList.add('horror');
           genHorrorText.textContent = 'They are already here.';
@@ -767,14 +820,14 @@
           await new Promise(r => setTimeout(r, 2500));
           stopEnemyPreview();
           genPhotoWrap.classList.remove('show');
-          await initGame(data.world_id);
+          await initGame(worldId);
           return;
         }
-        if (data.status === 'error') {
-          genStatus.textContent = `Error: ${data.error}`;
+        if (data.error) {
+          genStatus.textContent = `Error: ${JSON.stringify(data.error)}`;
           return;
         }
-        await new Promise(r => setTimeout(r, 3000));
+        await new Promise(r => setTimeout(r, 5000));
       }
     }
 
@@ -813,8 +866,9 @@
         antialiased: true,
       });
 
-      const spzPath = `/worlds/${worldId}/world_full_res.spz`;
-      await splatViewer.addSplatScene(spzPath, { progressiveLoad: true });
+      const meta = getWorld(worldId);
+      const spzUrl = meta?.spz_url || `/worlds/${worldId}/world_full_res.spz`;
+      await splatViewer.addSplatScene(spzUrl, { progressiveLoad: true });
       splatViewer.start();
 
       // Access Three.js internals

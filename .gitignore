@@ -4,3 +4,5 @@ worlds/
 __pycache__/
 *.pyc
 .DS_Store
+.vercel/
+node_modules/

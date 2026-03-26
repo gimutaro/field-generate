@@ -1,0 +1,1257 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Great Memories</title>
+  <link href="https://fonts.googleapis.com/css2?family=Patrick+Hand&family=Caveat:wght@400;600;700&family=Noto+Serif+JP:wght@300;500&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #0a0a0f; color: #fff; font-family: system-ui, sans-serif; overflow: hidden; }
+
+    .screen { position: fixed; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 50; }
+    .screen.active { display: flex; }
+
+    /* ═══ Upload: Cute crayon album theme ═══ */
+    #screen-upload {
+      background:
+        repeating-linear-gradient(0deg, transparent, transparent 31px, rgba(180,160,130,0.15) 31px, rgba(180,160,130,0.15) 32px),
+        linear-gradient(160deg, #fdf8f0 0%, #faf0e0 40%, #f5e8d0 100%);
+      color: #5a4a3a; font-family: 'Patrick Hand', 'Caveat', cursive;
+    }
+    #screen-upload h1 {
+      font-size: 2.8rem; margin-bottom: 0.2rem;
+      font-family: 'Caveat', cursive; font-weight: 700;
+      color: #e07848; letter-spacing: 2px;
+      text-shadow: 2px 2px 0px rgba(200,100,50,0.15);
+      transform: rotate(-1.5deg);
+    }
+    #screen-upload .album-icon { font-size: 2.5rem; margin-bottom: 0.5rem; }
+    #screen-upload p.sub {
+      color: #8a7a6a; margin-bottom: 1.8rem; font-size: 1.15rem;
+      font-family: 'Patrick Hand', cursive;
+    }
+    .drop-zone {
+      width: 400px; height: 240px;
+      border: 3px dashed #d4b896;
+      border-radius: 16px; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; cursor: pointer;
+      transition: all 0.3s;
+      background: rgba(255,255,255,0.55);
+      box-shadow: 0 3px 20px rgba(120,100,70,0.08);
+      position: relative;
+    }
+    .drop-zone::before {
+      content: ''; position: absolute; inset: 6px;
+      border: 2px dotted rgba(200,170,130,0.3); border-radius: 12px;
+      pointer-events: none;
+    }
+    .drop-zone:hover, .drop-zone.dragover {
+      border-color: #c08050; background: rgba(255,255,255,0.75);
+      box-shadow: 0 6px 30px rgba(120,100,70,0.15);
+      transform: scale(1.02);
+    }
+    .drop-zone .icon { font-size: 3rem; margin-bottom: 0.6rem; }
+    .drop-zone .text { color: #8a7a6a; font-size: 1.1rem; font-family: 'Patrick Hand', cursive; }
+    .drop-zone .text-small { color: #b0a090; font-size: 0.85rem; margin-top: 0.4rem; font-family: 'Patrick Hand', cursive; }
+    .preview-img {
+      max-width: 380px; max-height: 200px; border-radius: 6px; margin-bottom: 1rem;
+      object-fit: cover; display: none;
+      box-shadow: 3px 4px 15px rgba(0,0,0,0.12);
+      border: 4px solid #fff; transform: rotate(1deg);
+    }
+    .btn {
+      padding: 14px 36px; border: none; border-radius: 28px; font-size: 1.1rem;
+      cursor: pointer; transition: all 0.3s; margin-top: 1rem;
+      font-family: 'Patrick Hand', cursive; letter-spacing: 0.5px;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, #f0a060, #e08848); color: #fff;
+      font-weight: 600; box-shadow: 0 3px 15px rgba(220,130,70,0.35);
+    }
+    .btn-primary:hover { background: linear-gradient(135deg, #f8b878, #e89858); transform: translateY(-2px) rotate(-0.5deg); box-shadow: 0 6px 25px rgba(220,130,70,0.4); }
+    .btn-primary:disabled { background: #ddd0c4; color: #b0a898; cursor: not-allowed; transform: none; box-shadow: none; }
+    .btn-secondary { background: rgba(255,255,255,0.1); color: #fff; border: 1px solid rgba(255,255,255,0.2); }
+    .btn-secondary:hover { background: rgba(255,255,255,0.2); }
+
+    /* ═══ Generating: Peaceful → Horror transition ═══ */
+    #screen-generating {
+      background: linear-gradient(160deg, #fdf8f0 0%, #faf0e0 100%);
+      color: #5a4a3a; font-family: 'Patrick Hand', cursive;
+      transition: background 3s, color 3s;
+    }
+    #screen-generating.horror {
+      background: #0a0a0f;
+      color: #c44;
+      font-family: system-ui, sans-serif;
+    }
+    #screen-generating h2 {
+      font-size: 1.3rem; font-weight: 300; margin-bottom: 1.5rem;
+      transition: color 2s, text-shadow 2s;
+    }
+    #screen-generating.horror h2 { color: #c44; text-shadow: 0 0 20px rgba(200,0,0,0.5); }
+    .gen-emoji { font-size: 2rem; margin-bottom: 1rem; transition: opacity 0.5s; }
+    .gen-progress { width: 320px; height: 6px; border-radius: 3px; overflow: hidden; transition: background 2s; background: #e8dcc8; }
+    .gen-progress-fill { height: 100%; width: 0%; border-radius: 3px; transition: width 0.5s, background 2s; background: linear-gradient(90deg, #f0a060, #e08848); }
+    #screen-generating.horror .gen-progress { background: #222; }
+    #screen-generating.horror .gen-progress-fill { background: linear-gradient(90deg, #a00, #f00); }
+    .gen-status { margin-top: 1rem; font-size: 1rem; transition: color 2s; color: #9a8a7a; font-family: 'Patrick Hand', cursive; }
+    #screen-generating.horror .gen-status { color: #666; font-family: system-ui, sans-serif; }
+    .gen-log { margin-top: 0.5rem; font-size: 0.75rem; color: #bbb0a0; max-width: 400px; text-align: center; word-break: break-all; transition: color 2s; }
+    #screen-generating.horror .gen-log { color: #333; }
+    .gen-horror-text {
+      margin-top: 1.5rem; font-size: 1rem; color: #a00; opacity: 0;
+      transition: opacity 1.5s; font-style: italic; letter-spacing: 1px;
+      z-index: 2;
+    }
+    .gen-horror-text.visible { opacity: 1; }
+
+    /* Photo + enemy reveal */
+    .gen-photo-wrap {
+      position: relative; display: none; margin-bottom: 1.5rem;
+    }
+    .gen-photo-wrap.show { display: block; }
+    .gen-photo {
+      width: 360px; height: 220px; object-fit: cover;
+      border-radius: 8px; border: 4px solid #fff;
+      box-shadow: 3px 4px 20px rgba(0,0,0,0.15);
+      transform: rotate(1deg);
+      transition: filter 3s, border-color 3s, box-shadow 3s, transform 2s;
+    }
+    .gen-photo-wrap.horror .gen-photo {
+      filter: brightness(0.25) saturate(0.3);
+      border-color: #300; box-shadow: 0 0 40px rgba(150,0,0,0.3);
+      transform: rotate(0deg) scale(1.02);
+    }
+    .gen-enemy-overlay {
+      position: absolute; inset: 0; display: flex;
+      align-items: center; justify-content: center;
+      opacity: 0; transition: opacity 2s;
+      pointer-events: none;
+    }
+    .gen-photo-wrap.horror .gen-enemy-overlay { opacity: 1; }
+    .gen-enemy-overlay canvas {
+      width: 280px; height: 280px;
+      filter: drop-shadow(0 0 20px rgba(200,0,0,0.6)) drop-shadow(0 0 60px rgba(150,0,0,0.3));
+      animation: enemy-float 3s ease-in-out infinite;
+    }
+    @keyframes enemy-float {
+      0%, 100% { transform: translateY(0) scale(1); }
+      50% { transform: translateY(-8px) scale(1.05); }
+    }
+    .gen-glitch {
+      animation: glitch 0.1s infinite;
+    }
+    @keyframes glitch {
+      0% { transform: translate(0); }
+      25% { transform: translate(-2px, 1px); }
+      50% { transform: translate(2px, -1px); }
+      75% { transform: translate(-1px, -2px); }
+      100% { transform: translate(1px, 2px); }
+    }
+    @keyframes flicker {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    /* ═══ Ready ═══ */
+    #screen-ready { background: rgba(0,0,0,0.75); cursor: pointer; z-index: 60; }
+    #screen-ready h2 {
+      font-size: 2rem; font-weight: 200; letter-spacing: 6px; margin-bottom: 0.5rem;
+      color: #c44; text-shadow: 0 0 30px rgba(200,0,0,0.4);
+    }
+    #screen-ready .ready-sub { color: #888; font-size: 0.85rem; margin-bottom: 1.5rem; }
+    #screen-ready .keys { display: flex; gap: 1rem; margin-top: 1rem; }
+    #screen-ready .key { background: rgba(255,255,255,0.06); padding: 8px 16px; border-radius: 6px; font-size: 0.8rem; border: 1px solid rgba(255,255,255,0.1); color: #aaa; }
+
+    /* ═══ HUD ═══ */
+    #hud { position: fixed; inset: 0; pointer-events: none; z-index: 40; }
+    #crosshair {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      font-size: 24px; color: rgba(255,255,255,0.8); text-shadow: 0 0 4px rgba(0,0,0,0.8);
+      display: none;
+    }
+    #score-display {
+      position: absolute; top: 20px; left: 20px;
+      font-size: 1.2rem; font-weight: 600; display: none;
+    }
+    #lives-display {
+      position: absolute; top: 20px; right: 20px;
+      font-size: 1.5rem; display: none;
+      letter-spacing: 4px;
+    }
+    #elapsed-display {
+      position: absolute; top: 52px; right: 20px;
+      font-size: 0.85rem; color: #888; display: none;
+    }
+    #damage-flash {
+      position: fixed; inset: 0;
+      background: radial-gradient(ellipse at center, transparent 50%, rgba(255,0,0,0.4) 100%);
+      opacity: 0; pointer-events: none; z-index: 35;
+      transition: opacity 0.15s;
+    }
+    #hit-marker {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      font-size: 20px; color: #f44; opacity: 0; transition: opacity 0.1s;
+      pointer-events: none;
+    }
+
+    /* ═══ Game Over ═══ */
+    #screen-gameover {
+      background: rgba(0,0,0,0.85); z-index: 70;
+      text-align: center;
+    }
+    #screen-gameover h1 { font-size: 3rem; font-weight: 200; letter-spacing: 6px; margin-bottom: 0.5rem; color: #c44; }
+    #screen-gameover .final-score { font-size: 5rem; font-weight: 700; color: #fff; margin: 1rem 0; }
+    #screen-gameover .label { color: #666; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 2px; }
+    .btn-group { display: flex; gap: 1rem; margin-top: 2rem; }
+
+    /* ═══ Clear ═══ */
+    #screen-clear {
+      background: rgba(0,0,0,0.85); z-index: 70;
+      text-align: center;
+    }
+    #screen-clear h1 {
+      font-size: 3.5rem; font-weight: 200; letter-spacing: 8px;
+      color: #4af; text-shadow: 0 0 40px rgba(74,170,255,0.5);
+      margin-bottom: 0.5rem;
+    }
+    .clear-message {
+      font-size: 1.1rem; color: #aaa; margin-bottom: 1.5rem;
+      font-style: italic; letter-spacing: 1px;
+    }
+    #screen-clear .final-score { font-size: 5rem; font-weight: 700; color: #4af; margin: 1rem 0; }
+
+    /* ═══ Saved Worlds ═══ */
+    .divider { color: #c09868; margin: 2rem 0 1.2rem; font-size: 1rem; letter-spacing: 2px; font-family: 'Caveat', cursive; font-weight: 600; }
+    .worlds-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, 150px);
+      gap: 12px; max-width: 520px; max-height: 260px;
+      overflow-y: auto; padding: 4px; justify-content: center;
+    }
+    .worlds-grid::-webkit-scrollbar { width: 4px; }
+    .worlds-grid::-webkit-scrollbar-thumb { background: #c8b8a0; border-radius: 2px; }
+    .world-card {
+      width: 150px; border-radius: 8px; overflow: hidden; cursor: pointer;
+      background: rgba(255,255,255,0.6); border: 1px solid rgba(200,180,160,0.3);
+      transition: all 0.3s; box-shadow: 0 1px 8px rgba(100,80,60,0.08);
+    }
+    .world-card:hover { border-color: #a08060; transform: translateY(-2px); box-shadow: 0 4px 20px rgba(100,80,60,0.15); }
+    .world-card img { width: 100%; height: 85px; object-fit: cover; display: block; background: #e8e0d4; }
+    .world-card .card-body { padding: 8px 10px; }
+    .world-card .card-name { font-size: 0.82rem; font-weight: 500; color: #6b5744; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: 'Patrick Hand', cursive; }
+    .world-card .card-date { font-size: 0.65rem; color: #a09080; margin-top: 2px; font-family: 'Patrick Hand', cursive; }
+    .no-worlds { color: #b8a898; font-size: 0.95rem; font-family: 'Patrick Hand', cursive; }
+  </style>
+</head>
+<body>
+
+  <!-- Upload Screen -->
+  <div id="screen-upload" class="screen active">
+    <div class="album-icon">&#x1F4D6;</div>
+    <h1>Great Memories</h1>
+    <p class="sub">Add a photo from your favorite place!</p>
+    <img id="preview" class="preview-img">
+    <div id="drop-zone" class="drop-zone">
+      <div class="icon">&#x1F4F7;</div>
+      <div class="text">Drop your photo here</div>
+      <div class="text-small">JPG, PNG, WebP</div>
+    </div>
+    <input type="file" id="file-input" accept="image/jpeg,image/png,image/webp" hidden>
+    <button id="btn-generate" class="btn btn-primary" disabled>Add to Album</button>
+    <div id="saved-worlds-section">
+      <div class="divider">&#x2606; Your Memories &#x2606;</div>
+      <div id="worlds-grid" class="worlds-grid"></div>
+    </div>
+  </div>
+
+  <!-- Generating Screen -->
+  <div id="screen-generating" class="screen">
+    <div id="gen-emoji" class="gen-emoji">&#x2728;</div>
+    <div id="gen-photo-wrap" class="gen-photo-wrap">
+      <img id="gen-photo" class="gen-photo" src="" alt="">
+      <div class="gen-enemy-overlay" id="gen-enemy-overlay">
+        <canvas id="gen-enemy-canvas" width="280" height="280"></canvas>
+      </div>
+    </div>
+    <h2 id="gen-title">Creating your memory...</h2>
+    <div class="gen-progress"><div id="gen-progress-fill" class="gen-progress-fill"></div></div>
+    <div id="gen-status" class="gen-status">Preparing your photo...</div>
+    <div id="gen-log" class="gen-log"></div>
+    <div id="gen-horror-text" class="gen-horror-text"></div>
+  </div>
+
+  <!-- Ready Screen -->
+  <div id="screen-ready" class="screen">
+    <h2>SURVIVE</h2>
+    <p class="ready-sub">Something is wrong with this place...</p>
+    <div class="keys">
+      <span class="key">Mouse: Aim</span>
+      <span class="key">Click: Shoot</span>
+      <span class="key">Life x3</span>
+    </div>
+    <p class="ready-sub" style="margin-top:1.5rem; font-size:0.75rem; color:#555;">Click anywhere to begin</p>
+  </div>
+
+  <!-- HUD -->
+  <div id="hud">
+    <div id="crosshair">+</div>
+    <div id="score-display">SCORE: <span id="score-value">0</span> / <span id="kill-target">10</span></div>
+    <div id="lives-display" id="lives-value"></div>
+    <div id="elapsed-display"><span id="elapsed-value">0</span>s</div>
+    <div id="hit-marker">X</div>
+    <div id="damage-flash"></div>
+  </div>
+
+  <!-- Game Over Screen -->
+  <div id="screen-gameover" class="screen">
+    <h1>YOU DIED</h1>
+    <div class="label">Score</div>
+    <div class="final-score" id="final-score">0</div>
+    <div class="btn-group">
+      <button id="btn-retry" class="btn btn-primary">Play Again</button>
+      <button id="btn-new" class="btn btn-secondary">New World</button>
+    </div>
+  </div>
+
+  <!-- Clear Screen -->
+  <div id="screen-clear" class="screen">
+    <h1 id="clear-title">CLEAR</h1>
+    <div class="clear-message">All the ghosts are gone.</div>
+    <div class="label">Score</div>
+    <div class="final-score" id="clear-score">0</div>
+    <div class="btn-group">
+      <button id="btn-clear-retry" class="btn btn-primary">Play Again</button>
+      <button id="btn-clear-new" class="btn btn-secondary">New World</button>
+    </div>
+  </div>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"
+      }
+    }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+    const SPLAT_LIB_URL = 'https://cdn.jsdelivr.net/npm/@mkkellogg/gaussian-splats-3d@0.4.7/build/gaussian-splats-3d.module.js';
+
+    // ─── Config ───
+    const MAX_LIVES = 3;
+    const KILL_TARGET = 10;
+    const BULLET_SPEED = 40;
+    const BULLET_LIFETIME = 3;
+    const ENEMY_HIT_RADIUS = 1.2;
+    const ENEMY_CONTACT_RADIUS = 3.5;
+    const ENEMY_SPAWN_DISTANCE_MIN = 8;
+    const ENEMY_SPAWN_DISTANCE_MAX = 15;
+    const MOUSE_SENSITIVITY = 0.002;
+
+    // ─── State ───
+    let selectedFile = null;
+    let currentWorldId = null;
+    let splatViewer = null;
+    let enemyTemplate = null;
+    let GaussianSplats3D = null;
+
+    // Game state
+    let gameActive = false;
+    let score = 0;
+    let lives = MAX_LIVES;
+    let elapsed = 0;
+    let spawnInterval = 4;
+    const bullets = [];
+    const enemies = [];
+    let yaw = 0;
+    let pitch = 0;
+    // ─── Audio via AudioContext (avoids COEP blocking) ───
+    let audioCtx = null;
+    const audioBuffers = {};
+
+    function getAudioCtx() {
+      if (!audioCtx) audioCtx = new AudioContext();
+      return audioCtx;
+    }
+
+    async function loadAudio(name, url) {
+      const resp = await fetch(url);
+      const buf = await resp.arrayBuffer();
+      audioBuffers[name] = await getAudioCtx().decodeAudioData(buf);
+    }
+
+    function playSound(name, volume = 1, loop = false) {
+      const ctx = getAudioCtx();
+      const buffer = audioBuffers[name];
+      if (!buffer) return null;
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      source.loop = loop;
+      const gain = ctx.createGain();
+      gain.gain.value = volume;
+      source.connect(gain).connect(ctx.destination);
+      source.start();
+      return { source, gain };
+    }
+
+    let bgmHandle = null;
+    let seTimer = 0;
+    let seNextInterval = 8 + Math.random() * 15;
+
+    // ─── DOM ───
+    const screens = {
+      upload: document.getElementById('screen-upload'),
+      generating: document.getElementById('screen-generating'),
+      ready: document.getElementById('screen-ready'),
+      gameover: document.getElementById('screen-gameover'),
+      clear: document.getElementById('screen-clear'),
+    };
+    const dropZone = document.getElementById('drop-zone');
+    const fileInput = document.getElementById('file-input');
+    const preview = document.getElementById('preview');
+    const btnGenerate = document.getElementById('btn-generate');
+    const genProgressFill = document.getElementById('gen-progress-fill');
+    const genStatus = document.getElementById('gen-status');
+    const genLog = document.getElementById('gen-log');
+    const crosshair = document.getElementById('crosshair');
+    const scoreDisplay = document.getElementById('score-display');
+    const scoreValue = document.getElementById('score-value');
+    const livesDisplay = document.getElementById('lives-display');
+    const elapsedDisplay = document.getElementById('elapsed-display');
+    const elapsedValue = document.getElementById('elapsed-value');
+    const damageFlash = document.getElementById('damage-flash');
+    const hitMarker = document.getElementById('hit-marker');
+    const finalScore = document.getElementById('final-score');
+
+    function showScreen(name) {
+      Object.values(screens).forEach(s => s.classList.remove('active'));
+      if (name && screens[name]) screens[name].classList.add('active');
+    }
+
+    // ─── World Storage (localStorage) ───
+    const WORLDS_KEY = 'field-shooter-worlds';
+
+    function getSavedWorlds() {
+      try { return JSON.parse(localStorage.getItem(WORLDS_KEY)) || {}; }
+      catch { return {}; }
+    }
+    function saveWorld(id, meta) {
+      const w = getSavedWorlds();
+      w[id] = meta;
+      localStorage.setItem(WORLDS_KEY, JSON.stringify(w));
+    }
+    function getWorld(id) {
+      return getSavedWorlds()[id] || null;
+    }
+
+    async function seedWorlds() {
+      const existing = getSavedWorlds();
+      if (Object.keys(existing).length > 0) return;
+      try {
+        const resp = await fetch('/worlds-seed.json');
+        const seeds = await resp.json();
+        for (const [id, meta] of Object.entries(seeds)) {
+          saveWorld(id, meta);
+        }
+      } catch (e) {}
+    }
+
+    // ─── Load saved worlds ───
+    const worldsGrid = document.getElementById('worlds-grid');
+
+    async function loadSavedWorlds() {
+      await seedWorlds();
+      const worlds = getSavedWorlds();
+      const ids = Object.keys(worlds);
+      if (ids.length === 0) {
+        worldsGrid.innerHTML = '<div class="no-worlds">No saved worlds yet</div>';
+        return;
+      }
+      worldsGrid.innerHTML = '';
+      for (const id of ids) {
+        const w = worlds[id];
+        const card = document.createElement('div');
+        card.className = 'world-card';
+        const thumbUrl = w.thumbnail_url || '';
+        const name = w.display_name || id.slice(0, 8);
+        const caption = w.caption || '';
+        const shortCaption = caption.length > 60 ? caption.slice(0, 60) + '...' : caption;
+        card.innerHTML = `
+          <img src="${thumbUrl}" alt="${name}" crossorigin="anonymous" onerror="this.style.background='#222'">
+          <div class="card-body">
+            <div class="card-name" title="${name}">${name}</div>
+            <div class="card-date" title="${shortCaption}">${shortCaption || id.slice(0, 8)}</div>
+          </div>
+        `;
+        card.addEventListener('click', () => playExistingWorld(id));
+        worldsGrid.appendChild(card);
+      }
+    }
+
+    async function playExistingWorld(worldId) {
+      currentWorldId = worldId;
+      horrorPhase = 0;
+      const meta = getWorld(worldId);
+
+      genScreen.classList.remove('horror');
+      genTitle.textContent = 'Opening your memory...';
+      genTitle.classList.remove('gen-glitch');
+      genEmoji.textContent = '\u{1F4D6}';
+      genEmoji.style.opacity = '1';
+      genHorrorText.textContent = '';
+      genHorrorText.classList.remove('visible');
+      genStatus.textContent = 'Loading your favorite place...';
+      genStatus.style.color = '';
+      genProgressFill.style.width = '0%';
+
+      genPhoto.src = meta?.thumbnail_url || '';
+      genPhoto.crossOrigin = 'anonymous';
+      genPhotoWrap.classList.add('show');
+      genPhotoWrap.classList.remove('horror');
+
+      showScreen('generating');
+
+      await new Promise(r => setTimeout(r, 800));
+      genProgressFill.style.width = '30%';
+      genStatus.textContent = 'What a beautiful memory...';
+      await new Promise(r => setTimeout(r, 2000));
+
+      genProgressFill.style.width = '50%';
+      setHorrorPhase(1);
+      genStatus.textContent = 'Wait...';
+      await new Promise(r => setTimeout(r, 1500));
+
+      setHorrorPhase(2);
+      genProgressFill.style.width = '70%';
+      await new Promise(r => setTimeout(r, 1200));
+
+      setHorrorPhase(3);
+      genPhotoWrap.classList.add('horror');
+      genProgressFill.style.width = '90%';
+      genHorrorText.textContent = 'They are already here.';
+      genHorrorText.classList.add('visible');
+      await new Promise(r => setTimeout(r, 2500));
+
+      stopEnemyPreview();
+      genPhotoWrap.classList.remove('show');
+      await initGame(worldId);
+    }
+
+    loadSavedWorlds();
+
+    // ─── Upload ───
+    dropZone.addEventListener('click', () => fileInput.click());
+    dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('dragover');
+      const file = e.dataTransfer.files[0];
+      if (file && file.type.startsWith('image/')) selectFile(file);
+    });
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files[0]) selectFile(fileInput.files[0]);
+    });
+
+    function selectFile(file) {
+      selectedFile = file;
+      const url = URL.createObjectURL(file);
+      preview.src = url;
+      preview.style.display = 'block';
+      dropZone.style.display = 'none';
+      btnGenerate.disabled = false;
+    }
+
+    btnGenerate.addEventListener('click', startGeneration);
+
+    const genScreen = document.getElementById('screen-generating');
+    const genTitle = document.getElementById('gen-title');
+    const genEmoji = document.getElementById('gen-emoji');
+    const genHorrorText = document.getElementById('gen-horror-text');
+    const genPhotoWrap = document.getElementById('gen-photo-wrap');
+    const genPhoto = document.getElementById('gen-photo');
+    const genEnemyCanvas = document.getElementById('gen-enemy-canvas');
+
+    // ─── Enemy preview renderer ───
+    let enemyPreviewRunning = false;
+
+    async function startEnemyPreview() {
+      if (enemyPreviewRunning) return;
+      enemyPreviewRunning = true;
+
+      const prevRenderer = new THREE.WebGLRenderer({ canvas: genEnemyCanvas, alpha: true, antialias: true });
+      prevRenderer.setSize(280, 280);
+      prevRenderer.setClearColor(0x000000, 0);
+
+      const prevScene = new THREE.Scene();
+      const prevCamera = new THREE.PerspectiveCamera(40, 1, 0.1, 100);
+      prevCamera.position.set(0, 1, 4);
+      prevCamera.lookAt(0, 0.5, 0);
+
+      prevScene.add(new THREE.AmbientLight(0xffffff, 1.5));
+      const dLight = new THREE.DirectionalLight(0xff4444, 2);
+      dLight.position.set(2, 3, 4);
+      prevScene.add(dLight);
+      const rLight = new THREE.PointLight(0xff0000, 3, 10);
+      rLight.position.set(-2, 1, 2);
+      prevScene.add(rLight);
+
+      const loader = new GLTFLoader();
+      const gltf = await loader.loadAsync('/assets/enemy.glb');
+      const model = gltf.scene;
+
+      // Center and scale model
+      const box = new THREE.Box3().setFromObject(model);
+      const center = box.getCenter(new THREE.Vector3());
+      const size = box.getSize(new THREE.Vector3());
+      const maxDim = Math.max(size.x, size.y, size.z);
+      const scale = 2 / maxDim;
+      model.scale.setScalar(scale);
+      model.position.sub(center.multiplyScalar(scale));
+      prevScene.add(model);
+
+      let t = 0;
+      function animatePreview() {
+        if (!enemyPreviewRunning) {
+          prevRenderer.dispose();
+          return;
+        }
+        requestAnimationFrame(animatePreview);
+        t += 0.015;
+        model.position.y = 0.3 + Math.sin(t * 1.5) * 0.15;
+        prevRenderer.render(prevScene, prevCamera);
+      }
+      animatePreview();
+    }
+
+    function stopEnemyPreview() {
+      enemyPreviewRunning = false;
+    }
+
+    // Horror transition state
+    let horrorPhase = 0; // 0=peaceful, 1=uneasy, 2=glitch, 3=horror
+
+    const HORROR_MESSAGES = [
+      'Wait... something feels off...',
+      "This place... it's not what it seems.",
+      'Did you see that?',
+      'They are already here.',
+      'You should not have come.',
+      "It's too late to go back.",
+      'RUN.',
+    ];
+
+    function setHorrorPhase(phase) {
+      if (phase <= horrorPhase) return;
+      horrorPhase = phase;
+
+      if (phase === 1) {
+        // Uneasy
+        genTitle.textContent = 'Almost there...';
+        genEmoji.textContent = '...';
+        genStatus.style.color = '#887766';
+      }
+      if (phase === 2) {
+        // Glitch
+        genTitle.textContent = 'Something went wrong';
+        genEmoji.textContent = '';
+        genTitle.classList.add('gen-glitch');
+        setTimeout(() => genTitle.classList.remove('gen-glitch'), 800);
+        setTimeout(() => {
+          genTitle.classList.add('gen-glitch');
+          setTimeout(() => genTitle.classList.remove('gen-glitch'), 400);
+        }, 2000);
+      }
+      if (phase === 3) {
+        // Full horror
+        genScreen.classList.add('horror');
+        genEmoji.style.opacity = '0';
+        genTitle.textContent = 'They found you';
+        genTitle.classList.remove('gen-glitch');
+        genHorrorText.classList.add('visible');
+        startEnemyPreview();
+        const horrorRevealSe = new Audio('/assets/ghost_se.wav');
+        horrorRevealSe.volume = 0.7;
+        horrorRevealSe.play().catch(() => {});
+      }
+    }
+
+    let horrorMsgIndex = 0;
+    function showNextHorrorMessage() {
+      if (horrorMsgIndex < HORROR_MESSAGES.length) {
+        genHorrorText.textContent = HORROR_MESSAGES[horrorMsgIndex];
+        genHorrorText.classList.add('visible');
+        horrorMsgIndex++;
+      }
+    }
+
+    // ─── World Labs API helpers ───
+    async function wlPost(path, body) {
+      const res = await fetch(`/api/worldlabs?path=${encodeURIComponent(path)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      return res.json();
+    }
+    async function wlGet(path) {
+      const res = await fetch(`/api/worldlabs?path=${encodeURIComponent(path)}`);
+      return res.json();
+    }
+
+    async function startGeneration() {
+      if (!selectedFile) return;
+      horrorPhase = 0;
+      horrorMsgIndex = 0;
+      genScreen.classList.remove('horror');
+      genTitle.textContent = 'Creating your memory...';
+      genTitle.classList.remove('gen-glitch');
+      genEmoji.textContent = '\u2728';
+      genEmoji.style.opacity = '1';
+      genHorrorText.textContent = '';
+      genHorrorText.classList.remove('visible');
+
+      genPhoto.src = URL.createObjectURL(selectedFile);
+      genPhotoWrap.classList.add('show');
+      genPhotoWrap.classList.remove('horror');
+
+      showScreen('generating');
+      genStatus.textContent = 'Uploading your photo...';
+      genStatus.style.color = '';
+      genProgressFill.style.width = '5%';
+
+      try {
+        const ext = selectedFile.name.split('.').pop().toLowerCase();
+        const displayName = selectedFile.name.replace(/\.[^.]+$/, '');
+
+        // 1. Prepare upload
+        const prepareData = await wlPost('media-assets:prepare_upload', {
+          file_name: selectedFile.name,
+          kind: 'image',
+          extension: ext,
+        });
+        const uploadUrl = prepareData.upload_info.upload_url;
+        const uploadHeaders = prepareData.upload_info.required_headers;
+        const mediaAssetId = prepareData.media_asset.media_asset_id;
+
+        // 2. Upload to GCS directly
+        genStatus.textContent = 'Uploading your photo...';
+        genProgressFill.style.width = '10%';
+        const buf = await selectedFile.arrayBuffer();
+        await fetch(uploadUrl, {
+          method: 'PUT',
+          headers: uploadHeaders,
+          body: buf,
+        });
+
+        // 3. Start generation
+        genStatus.textContent = 'Preparing your memory...';
+        genProgressFill.style.width = '15%';
+        const genData = await wlPost('worlds:generate', {
+          display_name: displayName,
+          world_prompt: {
+            type: 'image',
+            image_prompt: { source: 'media_asset', media_asset_id: mediaAssetId },
+            text_prompt: '',
+          },
+        });
+
+        if (!genData.operation_id) throw new Error('Failed to start generation');
+
+        // 4. Poll World Labs directly
+        await pollGeneration(genData.operation_id, displayName);
+      } catch (err) {
+        genStatus.textContent = `Error: ${err.message}`;
+        genProgressFill.style.width = '0%';
+      }
+    }
+
+    let pollCount = 0;
+
+    async function pollGeneration(operationId, displayName) {
+      pollCount = 0;
+      while (true) {
+        const data = await wlGet(`operations/${operationId}`);
+        pollCount++;
+
+        const done = data.done || false;
+        const metadata = data.metadata || {};
+        const progress = metadata.progress || {};
+        const status = progress.status || 'UNKNOWN';
+
+        const pctMap = { UNKNOWN: 20, IN_PROGRESS: 45, SUCCEEDED: 100 };
+        genProgressFill.style.width = `${pctMap[status] || 20}%`;
+
+        if (pollCount <= 20) {
+          const textMap = { UNKNOWN: 'Building your memory world...', IN_PROGRESS: 'Adding the finishing touches...' };
+          genStatus.textContent = textMap[status] || 'Working on it...';
+        }
+        if (pollCount === 20) setHorrorPhase(1);
+        if (pollCount === 30) { setHorrorPhase(2); showNextHorrorMessage(); }
+        if (pollCount === 35) showNextHorrorMessage();
+        if (pollCount === 40) { setHorrorPhase(3); showNextHorrorMessage(); genPhotoWrap.classList.add('horror'); }
+        if (pollCount > 40 && pollCount % 5 === 0) showNextHorrorMessage();
+
+        if (horrorPhase >= 2) genLog.textContent = '';
+
+        if (done && !data.error) {
+          const worldId = metadata.world_id;
+          const resp = data.response || {};
+          const assets = resp.assets || {};
+
+          // Save to localStorage
+          saveWorld(worldId, {
+            display_name: displayName || worldId.slice(0, 8),
+            spz_url: assets.splats?.spz_urls?.full_res || '',
+            thumbnail_url: assets.thumbnail_url || '',
+            caption: (assets.caption || '').slice(0, 100),
+            marble_url: resp.world_marble_url || '',
+          });
+
+          currentWorldId = worldId;
+          if (horrorPhase < 3) setHorrorPhase(3);
+          genPhotoWrap.classList.add('horror');
+          genHorrorText.textContent = 'They are already here.';
+          genHorrorText.classList.add('visible');
+          await new Promise(r => setTimeout(r, 2500));
+          stopEnemyPreview();
+          genPhotoWrap.classList.remove('show');
+          await initGame(worldId);
+          return;
+        }
+        if (data.error) {
+          genStatus.textContent = `Error: ${JSON.stringify(data.error)}`;
+          return;
+        }
+        await new Promise(r => setTimeout(r, 5000));
+      }
+    }
+
+    // ─── Game Init ───
+    async function initGame(worldId) {
+      // Preload audio
+      if (!audioBuffers['bgm']) {
+        await Promise.all([
+          loadAudio('bgm', '/assets/bgm.wav'),
+          loadAudio('damage', '/assets/damage_se.mp3'),
+          loadAudio('ghost', '/assets/ghost_se.wav'),
+          loadAudio('gameover', '/assets/gameover_se.mp3'),
+        ]);
+      }
+
+      // Load GaussianSplats3D
+      if (!GaussianSplats3D) {
+        GaussianSplats3D = await import(SPLAT_LIB_URL);
+      }
+
+      // Dispose previous viewer
+      if (splatViewer) {
+        try { splatViewer.dispose(); } catch (e) {}
+        splatViewer = null;
+        // Remove old canvases from viewer
+        document.querySelectorAll('canvas').forEach(c => c.remove());
+      }
+
+      // Create splat viewer (self-driven, no built-in controls)
+      splatViewer = new GaussianSplats3D.Viewer({
+        sharedMemoryForWorkers: false,
+        cameraUp: [0, -1, 0],
+        initialCameraPosition: [0, -2, -6],
+        initialCameraLookAt: [0, 0, 0],
+        useBuiltInControls: false,
+        antialiased: true,
+      });
+
+      const meta = getWorld(worldId);
+      const spzUrl = meta?.spz_url || `/worlds/${worldId}/world_full_res.spz`;
+      await splatViewer.addSplatScene(spzUrl, { progressiveLoad: true });
+      splatViewer.start();
+
+      // Access Three.js internals
+      const scene = splatViewer.threeScene;
+      const camera = splatViewer.camera;
+      const renderer = splatViewer.renderer;
+      const canvas = renderer.domElement;
+
+      // Lighting for GLB enemies
+      const ambient = new THREE.AmbientLight(0xffffff, 2);
+      scene.add(ambient);
+      const dirLight = new THREE.DirectionalLight(0xffffff, 1);
+      dirLight.position.set(5, -10, 5);
+      scene.add(dirLight);
+
+      // Load enemy GLB
+      const loader = new GLTFLoader();
+      const gltf = await loader.loadAsync('/assets/enemy.glb');
+      enemyTemplate = gltf.scene;
+      enemyTemplate.scale.setScalar(1.5);
+
+      // Reset camera
+      yaw = 0; // Face +Z (toward origin from z=-6)
+      pitch = 0;
+      camera.position.set(0, -2, -6);
+      updateCameraRotation(camera);
+
+      showScreen('ready');
+
+      // ─── Input ───
+      const onMouseMove = (e) => {
+        if (!gameActive || document.pointerLockElement !== canvas) return;
+        yaw += e.movementX * MOUSE_SENSITIVITY;
+        pitch += e.movementY * MOUSE_SENSITIVITY;
+        pitch = Math.max(-Math.PI / 2 + 0.05, Math.min(Math.PI / 2 - 0.05, pitch));
+        updateCameraRotation(camera);
+      };
+
+      const onClick = () => {
+        if (!gameActive) return;
+        if (document.pointerLockElement !== canvas) {
+          canvas.requestPointerLock();
+          return;
+        }
+        shoot(scene, camera);
+      };
+
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('click', onClick);
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('click', onClick);
+
+      // ─── Ready screen click ───
+      screens.ready.onclick = () => {
+        canvas.requestPointerLock();
+        startGame(scene, camera);
+      };
+
+      // ─── Retry ───
+      document.getElementById('btn-retry').onclick = () => {
+        resetGame(scene, camera);
+        showScreen('ready');
+      };
+      document.getElementById('btn-new').onclick = () => {
+        window.location.reload();
+      };
+      document.getElementById('btn-clear-retry').onclick = () => {
+        resetGame(scene, camera);
+        showScreen('ready');
+      };
+      document.getElementById('btn-clear-new').onclick = () => {
+        window.location.reload();
+      };
+
+      // ─── Game Loop ───
+      const clock = new THREE.Clock();
+      function gameLoop() {
+        requestAnimationFrame(gameLoop);
+        const delta = Math.min(clock.getDelta(), 0.1);
+        if (gameActive) {
+          updateElapsed(delta);
+          updateBullets(scene, delta);
+          updateEnemies(camera, delta);
+          checkCollisions(scene);
+          checkEnemyContact(scene, camera);
+          spawnTick(scene, camera, delta);
+        }
+      }
+      gameLoop();
+    }
+
+    function updateCameraRotation(camera) {
+      // Build forward direction from yaw/pitch
+      const forward = new THREE.Vector3(
+        Math.sin(yaw) * Math.cos(pitch),
+        Math.sin(pitch),
+        Math.cos(yaw) * Math.cos(pitch),
+      );
+      const target = camera.position.clone().add(forward);
+      // Splat world has ground at +Y, sky at -Y, so camera up = -Y
+      camera.up.set(0, -1, 0);
+      camera.lookAt(target);
+    }
+
+    // ─── Game Logic ───
+    function updateLivesDisplay() {
+      const full = '&#x2764;&#xFE0F;'.repeat(lives);
+      const empty = '&#x1F5A4;'.repeat(MAX_LIVES - lives);
+      livesDisplay.innerHTML = full + empty;
+    }
+
+    function startGame(scene, camera) {
+      resetGame(scene, camera);
+      gameActive = true;
+      showScreen(null);
+      crosshair.style.display = 'block';
+      scoreDisplay.style.display = 'block';
+      livesDisplay.style.display = 'block';
+      elapsedDisplay.style.display = 'block';
+
+      // BGM
+      if (bgmHandle) { bgmHandle.source.stop(); bgmHandle = null; }
+      bgmHandle = playSound('bgm', 0.4, true);
+
+      // Spawn initial enemies
+      for (let i = 0; i < 16; i++) spawnEnemy(scene, camera);
+    }
+
+    function resetGame(scene, camera) {
+      gameActive = false;
+      score = 0;
+      lives = MAX_LIVES;
+      elapsed = 0;
+      spawnInterval = 4;
+      spawnTimer = 0;
+      seTimer = 0;
+      seNextInterval = 8 + Math.random() * 15;
+      scoreValue.textContent = '0';
+      document.getElementById('kill-target').textContent = KILL_TARGET;
+      elapsedValue.textContent = '0';
+      updateLivesDisplay();
+
+      for (const b of bullets) scene.remove(b);
+      bullets.length = 0;
+      for (const e of enemies) scene.remove(e);
+      enemies.length = 0;
+
+      crosshair.style.display = 'none';
+      scoreDisplay.style.display = 'none';
+      livesDisplay.style.display = 'none';
+      elapsedDisplay.style.display = 'none';
+
+      yaw = 0;
+      pitch = 0;
+      camera.position.set(0, -2, -6);
+      updateCameraRotation(camera);
+    }
+
+    let spawnTimer = 0;
+    function spawnTick(scene, camera, delta) {
+      spawnTimer += delta;
+      // Max enemies and spawn rate increase over time
+      const maxEnemies = Math.min(20 + Math.floor(elapsed / 8), 60);
+      spawnInterval = Math.max(1, 4 - elapsed * 0.03);
+
+      if (spawnTimer >= spawnInterval && enemies.length < maxEnemies) {
+        spawnEnemy(scene, camera);
+        spawnTimer = 0;
+      }
+    }
+
+    function spawnEnemy(scene, camera) {
+      const enemy = enemyTemplate.clone();
+
+      const angle = Math.random() * Math.PI * 2;
+      const dist = ENEMY_SPAWN_DISTANCE_MIN + Math.random() * (ENEMY_SPAWN_DISTANCE_MAX - ENEMY_SPAWN_DISTANCE_MIN);
+      const camPos = camera.position;
+
+      enemy.position.set(
+        camPos.x + Math.cos(angle) * dist,
+        camPos.y + (Math.random() * -4 - 1),
+        camPos.z + Math.sin(angle) * dist,
+      );
+
+      enemy.traverse((child) => {
+        if (child.isMesh) {
+          child.material = child.material.clone();
+          child.material.transparent = true;
+          child.material.depthWrite = false;
+          child.renderOrder = 1;
+        }
+      });
+
+      const isStraight = Math.random() < 0.3;
+
+      enemy.userData = {
+        orbitAngle: angle,
+        distance: dist,
+        baseY: enemy.position.y,
+        bobPhase: Math.random() * Math.PI * 2,
+        orbitSpeed: isStraight ? 0 : (0.1 + Math.random() * 0.2) * (Math.random() < 0.5 ? 1 : -1),
+        approachSpeed: isStraight ? 0.4 + Math.random() * 0.3 : 0.2 + Math.random() * 0.4,
+        centerX: camPos.x,
+        centerZ: camPos.z,
+        stealthTimer: 2 + Math.random() * 5,
+        stealthDuration: 1.5 + Math.random() * 2,
+        isStealth: false,
+      };
+
+      scene.add(enemy);
+      enemies.push(enemy);
+    }
+
+    let lastShotTime = 0;
+    function shoot(scene, camera) {
+      const now = performance.now();
+      if (now - lastShotTime < 500) return;
+      lastShotTime = now;
+      const geo = new THREE.SphereGeometry(0.08, 8, 8);
+      const mat = new THREE.MeshBasicMaterial({ color: 0x44aaff, emissive: 0x44aaff });
+      const bullet = new THREE.Mesh(geo, mat);
+
+      bullet.position.copy(camera.position);
+
+      const dir = new THREE.Vector3(0, 0, -1);
+      dir.applyQuaternion(camera.quaternion);
+
+      bullet.userData = {
+        velocity: dir.multiplyScalar(BULLET_SPEED),
+        lifetime: BULLET_LIFETIME,
+      };
+
+      // Muzzle flash (small light)
+      const flash = new THREE.PointLight(0x44aaff, 3, 5);
+      bullet.add(flash);
+      setTimeout(() => bullet.remove(flash), 50);
+
+      scene.add(bullet);
+      bullets.push(bullet);
+    }
+
+    function updateBullets(scene, delta) {
+      for (let i = bullets.length - 1; i >= 0; i--) {
+        const b = bullets[i];
+        const vel = b.userData.velocity;
+        b.position.x += vel.x * delta;
+        b.position.y += vel.y * delta;
+        b.position.z += vel.z * delta;
+        b.userData.lifetime -= delta;
+
+        if (b.userData.lifetime <= 0) {
+          scene.remove(b);
+          bullets.splice(i, 1);
+        }
+      }
+    }
+
+    function updateEnemies(camera, delta) {
+      for (const e of enemies) {
+        const d = e.userData;
+        d.bobPhase += delta * 2;
+        d.orbitAngle += delta * d.orbitSpeed;
+
+        // Slowly approach player
+        d.distance = Math.max(0, d.distance - delta * d.approachSpeed);
+
+        // Orbit around the player (not spawn point)
+        e.position.x = camera.position.x + Math.cos(d.orbitAngle) * d.distance;
+        e.position.z = camera.position.z + Math.sin(d.orbitAngle) * d.distance;
+        e.position.y = d.baseY + Math.sin(d.bobPhase) * 0.5;
+
+        // Stealth toggle
+        d.stealthTimer -= delta;
+        if (d.stealthTimer <= 0) {
+          d.isStealth = !d.isStealth;
+          d.stealthTimer = d.isStealth
+            ? d.stealthDuration
+            : 2 + Math.random() * 5;
+        }
+        const targetOpacity = d.isStealth ? 0 : 1;
+        const fadeSpeed = delta * 2;
+        e.traverse((child) => {
+          if (child.isMesh) {
+            const op = child.material.opacity + (targetOpacity - child.material.opacity) * Math.min(fadeSpeed, 1);
+            child.material.opacity = op;
+            child.material.depthWrite = op > 0.99;
+            child.visible = op > 0.01;
+          }
+        });
+
+        // Face camera
+        e.up.set(0, -1, 0);
+        e.lookAt(camera.position);
+      }
+    }
+
+    function checkCollisions(scene) {
+      for (let i = bullets.length - 1; i >= 0; i--) {
+        for (let j = enemies.length - 1; j >= 0; j--) {
+          const dist = bullets[i].position.distanceTo(enemies[j].position);
+          if (dist < ENEMY_HIT_RADIUS) {
+            // Hit!
+            scene.remove(bullets[i]);
+            scene.remove(enemies[j]);
+            bullets.splice(i, 1);
+            enemies.splice(j, 1);
+
+            score++;
+            scoreValue.textContent = score;
+
+            // Hit marker flash
+            hitMarker.style.opacity = '1';
+            setTimeout(() => { hitMarker.style.opacity = '0'; }, 150);
+
+            // Clear check
+            if (score >= KILL_TARGET) {
+              gameActive = false;
+              if (bgmHandle) { bgmHandle.source.stop(); bgmHandle = null; }
+              document.exitPointerLock();
+              crosshair.style.display = 'none';
+              scoreDisplay.style.display = 'none';
+              livesDisplay.style.display = 'none';
+              elapsedDisplay.style.display = 'none';
+              document.getElementById('clear-score').textContent = score;
+              showScreen('clear');
+              return;
+            }
+
+            break;
+          }
+        }
+      }
+    }
+
+    function checkEnemyContact(scene, camera) {
+      for (let i = enemies.length - 1; i >= 0; i--) {
+        const dx = enemies[i].position.x - camera.position.x;
+        const dz = enemies[i].position.z - camera.position.z;
+        const dist = Math.sqrt(dx * dx + dz * dz);
+        if (dist < ENEMY_CONTACT_RADIUS) {
+          scene.remove(enemies[i]);
+          enemies.splice(i, 1);
+          takeDamage(scene, camera);
+          if (!gameActive) return;
+        }
+      }
+    }
+
+    function takeDamage(scene, camera) {
+      lives--;
+      updateLivesDisplay();
+
+      playSound('damage', 0.7);
+
+      // Red flash
+      damageFlash.style.opacity = '1';
+      setTimeout(() => { damageFlash.style.opacity = '0'; }, 300);
+
+      if (lives <= 0) {
+        gameActive = false;
+        if (bgmHandle) { bgmHandle.source.stop(); bgmHandle = null; }
+        playSound('gameover', 0.8);
+        document.exitPointerLock();
+        crosshair.style.display = 'none';
+        scoreDisplay.style.display = 'none';
+        livesDisplay.style.display = 'none';
+        elapsedDisplay.style.display = 'none';
+        finalScore.textContent = score;
+        showScreen('gameover');
+      }
+    }
+
+    function updateElapsed(delta) {
+      elapsed += delta;
+      elapsedValue.textContent = Math.floor(elapsed);
+
+      seTimer += delta;
+      if (seTimer >= seNextInterval) {
+        playSound('ghost', 0.6);
+        seTimer = 0;
+        seNextInterval = 8 + Math.random() * 15;
+      }
+    }
+  </script>
+</body>
+</html>
