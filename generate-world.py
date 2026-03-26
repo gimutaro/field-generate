@@ -13,9 +13,9 @@ OUTPUT_DIR = os.path.join(PROJECT_DIR, "worlds")
 def load_api_key():
     with open(ENV_PATH) as f:
         for line in f:
-            if line.startswith("WLT-Api-Key="):
+            if line.startswith("WLT_API_KEY="):
                 return line.strip().split("=", 1)[1]
-    raise ValueError("WLT-Api-Key not found in .env")
+    raise ValueError("WLT_API_KEY not found in .env")
 
 
 def api_request(method, url, headers=None, json_data=None, binary_data=None):

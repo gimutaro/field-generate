@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Load API key from .env
-API_KEY=$(grep 'WLT-Api-Key' /Users/ryo/field-generate/.env | cut -d'=' -f2)
+API_KEY=$(grep 'WLT_API_KEY' /Users/ryo/field-generate/.env | cut -d'=' -f2)
 BASE_URL="https://api.worldlabs.ai/marble/v1"
 IMAGE_PATH="/Users/ryo/field-generate/lapland.jpg"
 
