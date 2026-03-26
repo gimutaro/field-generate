@@ -26,6 +26,8 @@ MIME_TYPES = {
     ".js": "application/javascript",
     ".css": "text/css",
     ".txt": "text/plain",
+    ".mp3": "audio/mpeg",
+    ".wav": "audio/wav",
 }
 
 generations = {}
