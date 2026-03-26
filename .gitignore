@@ -1,0 +1,6 @@
+.env
+uploads/
+worlds/
+__pycache__/
+*.pyc
+.DS_Store

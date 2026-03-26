@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Field Shooter</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #0a0a0f; color: #fff; font-family: system-ui, sans-serif; overflow: hidden; }
+
+    .screen { position: fixed; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 50; }
+    .screen.active { display: flex; }
+
+    /* Upload */
+    #screen-upload { background: linear-gradient(135deg, #0a0a1a 0%, #1a1a2e 100%); }
+    #screen-upload h1 { font-size: 2rem; margin-bottom: 0.5rem; font-weight: 300; letter-spacing: 2px; }
+    #screen-upload p.sub { color: #666; margin-bottom: 2rem; font-size: 0.9rem; }
+    .drop-zone {
+      width: 400px; height: 250px; border: 2px dashed #333;
+      border-radius: 16px; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; cursor: pointer;
+      transition: all 0.3s; background: rgba(255,255,255,0.02);
+    }
+    .drop-zone:hover, .drop-zone.dragover { border-color: #4af; background: rgba(74,170,255,0.05); }
+    .drop-zone .icon { font-size: 3rem; margin-bottom: 1rem; opacity: 0.3; }
+    .drop-zone .text { color: #888; font-size: 0.9rem; }
+    .drop-zone .text-small { color: #555; font-size: 0.75rem; margin-top: 0.5rem; }
+    .preview-img { max-width: 380px; max-height: 200px; border-radius: 12px; margin-bottom: 1rem; object-fit: cover; display: none; }
+    .btn {
+      padding: 12px 32px; border: none; border-radius: 8px; font-size: 1rem;
+      cursor: pointer; transition: all 0.2s; margin-top: 1rem;
+    }
+    .btn-primary { background: #4af; color: #000; font-weight: 600; }
+    .btn-primary:hover { background: #5bf; transform: translateY(-1px); }
+    .btn-primary:disabled { background: #333; color: #666; cursor: not-allowed; transform: none; }
+    .btn-secondary { background: rgba(255,255,255,0.1); color: #fff; border: 1px solid rgba(255,255,255,0.2); }
+    .btn-secondary:hover { background: rgba(255,255,255,0.2); }
+
+    /* Generating */
+    #screen-generating { background: rgba(10,10,15,0.95); }
+    #screen-generating h2 { font-size: 1.3rem; font-weight: 300; margin-bottom: 1.5rem; }
+    .gen-progress { width: 320px; height: 4px; background: #222; border-radius: 2px; overflow: hidden; }
+    .gen-progress-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #4af, #a4f); border-radius: 2px; transition: width 0.5s; }
+    .gen-status { margin-top: 1rem; font-size: 0.85rem; color: #666; }
+    .gen-log { margin-top: 0.5rem; font-size: 0.75rem; color: #444; max-width: 400px; text-align: center; word-break: break-all; }
+
+    /* Ready */
+    #screen-ready { background: rgba(0,0,0,0.6); cursor: pointer; z-index: 60; }
+    #screen-ready h2 { font-size: 2.5rem; font-weight: 200; letter-spacing: 4px; margin-bottom: 1rem; }
+    #screen-ready p { color: #aaa; font-size: 0.9rem; line-height: 1.8; }
+    #screen-ready .keys { display: flex; gap: 1rem; margin-top: 1.5rem; }
+    #screen-ready .key { background: rgba(255,255,255,0.1); padding: 8px 16px; border-radius: 6px; font-size: 0.8rem; border: 1px solid rgba(255,255,255,0.2); }
+
+    /* HUD */
+    #hud { position: fixed; inset: 0; pointer-events: none; z-index: 40; }
+    #crosshair {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      font-size: 24px; color: rgba(255,255,255,0.8); text-shadow: 0 0 4px rgba(0,0,0,0.8);
+      display: none;
+    }
+    #score-display {
+      position: absolute; top: 20px; left: 20px;
+      font-size: 1.2rem; font-weight: 600; display: none;
+    }
+    #lives-display {
+      position: absolute; top: 20px; right: 20px;
+      font-size: 1.5rem; display: none;
+      letter-spacing: 4px;
+    }
+    #elapsed-display {
+      position: absolute; top: 52px; right: 20px;
+      font-size: 0.85rem; color: #888; display: none;
+    }
+    #damage-flash {
+      position: fixed; inset: 0;
+      background: radial-gradient(ellipse at center, transparent 50%, rgba(255,0,0,0.4) 100%);
+      opacity: 0; pointer-events: none; z-index: 35;
+      transition: opacity 0.15s;
+    }
+    #hit-marker {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      font-size: 20px; color: #f44; opacity: 0; transition: opacity 0.1s;
+      pointer-events: none;
+    }
+
+    /* Game Over */
+    #screen-gameover {
+      background: rgba(0,0,0,0.85); z-index: 70;
+      text-align: center;
+    }
+    #screen-gameover h1 { font-size: 3rem; font-weight: 200; letter-spacing: 6px; margin-bottom: 0.5rem; }
+    #screen-gameover .final-score { font-size: 5rem; font-weight: 700; color: #4af; margin: 1rem 0; }
+    #screen-gameover .label { color: #666; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 2px; }
+    .btn-group { display: flex; gap: 1rem; margin-top: 2rem; }
+
+    /* Saved Worlds */
+    .divider { color: #333; margin: 2rem 0 1.5rem; font-size: 0.8rem; letter-spacing: 2px; text-transform: uppercase; }
+    .worlds-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, 160px);
+      gap: 12px; max-width: 520px; max-height: 280px;
+      overflow-y: auto; padding: 4px; justify-content: center;
+    }
+    .worlds-grid::-webkit-scrollbar { width: 4px; }
+    .worlds-grid::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+    .world-card {
+      width: 160px; border-radius: 10px; overflow: hidden; cursor: pointer;
+      background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
+      transition: all 0.2s;
+    }
+    .world-card:hover { border-color: #4af; transform: translateY(-2px); box-shadow: 0 4px 20px rgba(74,170,255,0.15); }
+    .world-card img { width: 100%; height: 90px; object-fit: cover; display: block; background: #111; }
+    .world-card .card-body { padding: 8px 10px; }
+    .world-card .card-name { font-size: 0.75rem; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .world-card .card-date { font-size: 0.65rem; color: #555; margin-top: 2px; }
+    .no-worlds { color: #444; font-size: 0.8rem; }
+  </style>
+</head>
+<body>
+
+  <!-- Upload Screen -->
+  <div id="screen-upload" class="screen active">
+    <h1>FIELD SHOOTER</h1>
+    <p class="sub">Upload an image to generate your battlefield</p>
+    <img id="preview" class="preview-img">
+    <div id="drop-zone" class="drop-zone">
+      <div class="icon">+</div>
+      <div class="text">Drop image here or click to select</div>
+      <div class="text-small">JPG, PNG, WebP</div>
+    </div>
+    <input type="file" id="file-input" accept="image/jpeg,image/png,image/webp" hidden>
+    <button id="btn-generate" class="btn btn-primary" disabled>Generate World</button>
+    <div id="saved-worlds-section">
+      <div class="divider">- Saved Worlds -</div>
+      <div id="worlds-grid" class="worlds-grid"></div>
+    </div>
+  </div>
+
+  <!-- Generating Screen -->
+  <div id="screen-generating" class="screen">
+    <h2>Generating your world...</h2>
+    <div class="gen-progress"><div id="gen-progress-fill" class="gen-progress-fill"></div></div>
+    <div id="gen-status" class="gen-status">Starting...</div>
+    <div id="gen-log" class="gen-log"></div>
+  </div>
+
+  <!-- Ready Screen -->
+  <div id="screen-ready" class="screen">
+    <h2>READY</h2>
+    <p>Click to start the game</p>
+    <div class="keys">
+      <span class="key">Mouse: Aim</span>
+      <span class="key">Click: Shoot</span>
+      <span class="key">Life x3</span>
+    </div>
+  </div>
+
+  <!-- HUD -->
+  <div id="hud">
+    <div id="crosshair">+</div>
+    <div id="score-display">SCORE: <span id="score-value">0</span></div>
+    <div id="lives-display" id="lives-value"></div>
+    <div id="elapsed-display"><span id="elapsed-value">0</span>s</div>
+    <div id="hit-marker">X</div>
+    <div id="damage-flash"></div>
+  </div>
+
+  <!-- Game Over Screen -->
+  <div id="screen-gameover" class="screen">
+    <h1>GAME OVER</h1>
+    <div class="label">Score</div>
+    <div class="final-score" id="final-score">0</div>
+    <div class="btn-group">
+      <button id="btn-retry" class="btn btn-primary">Play Again</button>
+      <button id="btn-new" class="btn btn-secondary">New World</button>
+    </div>
+  </div>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"
+      }
+    }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+    const SPLAT_LIB_URL = 'https://cdn.jsdelivr.net/npm/@mkkellogg/gaussian-splats-3d@0.4.7/build/gaussian-splats-3d.module.js';
+
+    // ─── Config ───
+    const MAX_LIVES = 3;
+    const BULLET_SPEED = 40;
+    const BULLET_LIFETIME = 3;
+    const ENEMY_HIT_RADIUS = 1.2;
+    const ENEMY_CONTACT_RADIUS = 2.0;
+    const ENEMY_SPAWN_DISTANCE_MIN = 18;
+    const ENEMY_SPAWN_DISTANCE_MAX = 28;
+    const MOUSE_SENSITIVITY = 0.002;
+
+    // ─── State ───
+    let selectedFile = null;
+    let currentWorldId = null;
+    let splatViewer = null;
+    let enemyTemplate = null;
+    let GaussianSplats3D = null;
+
+    // Game state
+    let gameActive = false;
+    let score = 0;
+    let lives = MAX_LIVES;
+    let elapsed = 0;
+    let spawnInterval = 4;
+    const bullets = [];
+    const enemies = [];
+    let yaw = 0;
+    let pitch = 0;
+
+    // ─── DOM ───
+    const screens = {
+      upload: document.getElementById('screen-upload'),
+      generating: document.getElementById('screen-generating'),
+      ready: document.getElementById('screen-ready'),
+      gameover: document.getElementById('screen-gameover'),
+    };
+    const dropZone = document.getElementById('drop-zone');
+    const fileInput = document.getElementById('file-input');
+    const preview = document.getElementById('preview');
+    const btnGenerate = document.getElementById('btn-generate');
+    const genProgressFill = document.getElementById('gen-progress-fill');
+    const genStatus = document.getElementById('gen-status');
+    const genLog = document.getElementById('gen-log');
+    const crosshair = document.getElementById('crosshair');
+    const scoreDisplay = document.getElementById('score-display');
+    const scoreValue = document.getElementById('score-value');
+    const livesDisplay = document.getElementById('lives-display');
+    const elapsedDisplay = document.getElementById('elapsed-display');
+    const elapsedValue = document.getElementById('elapsed-value');
+    const damageFlash = document.getElementById('damage-flash');
+    const hitMarker = document.getElementById('hit-marker');
+    const finalScore = document.getElementById('final-score');
+
+    function showScreen(name) {
+      Object.values(screens).forEach(s => s.classList.remove('active'));
+      if (name && screens[name]) screens[name].classList.add('active');
+    }
+
+    // ─── Load saved worlds ───
+    const worldsGrid = document.getElementById('worlds-grid');
+
+    async function loadSavedWorlds() {
+      try {
+        const res = await fetch('/api/worlds');
+        const worlds = await res.json();
+        if (worlds.length === 0) {
+          worldsGrid.innerHTML = '<div class="no-worlds">No saved worlds yet</div>';
+          return;
+        }
+        worldsGrid.innerHTML = '';
+        for (const w of worlds) {
+          const meta = await fetch(`/worlds/${w.id}/metadata.json`).then(r => r.json()).catch(() => null);
+          const card = document.createElement('div');
+          card.className = 'world-card';
+          const name = meta?.response?.display_name || w.id.slice(0, 8);
+          const thumbUrl = `/worlds/${w.id}/thumbnail.webp`;
+          const caption = meta?.response?.assets?.caption || '';
+          const shortCaption = caption.length > 60 ? caption.slice(0, 60) + '...' : caption;
+          card.innerHTML = `
+            <img src="${thumbUrl}" alt="${name}" onerror="this.style.background='#222'">
+            <div class="card-body">
+              <div class="card-name" title="${name}">${name}</div>
+              <div class="card-date" title="${shortCaption}">${shortCaption || w.id.slice(0, 8)}</div>
+            </div>
+          `;
+          card.addEventListener('click', () => playExistingWorld(w.id));
+          worldsGrid.appendChild(card);
+        }
+      } catch (e) {
+        worldsGrid.innerHTML = '<div class="no-worlds">Failed to load worlds</div>';
+      }
+    }
+
+    async function playExistingWorld(worldId) {
+      currentWorldId = worldId;
+      showScreen('generating');
+      genStatus.textContent = 'Loading game...';
+      genProgressFill.style.width = '90%';
+      await initGame(worldId);
+    }
+
+    loadSavedWorlds();
+
+    // ─── Upload ───
+    dropZone.addEventListener('click', () => fileInput.click());
+    dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('dragover');
+      const file = e.dataTransfer.files[0];
+      if (file && file.type.startsWith('image/')) selectFile(file);
+    });
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files[0]) selectFile(fileInput.files[0]);
+    });
+
+    function selectFile(file) {
+      selectedFile = file;
+      const url = URL.createObjectURL(file);
+      preview.src = url;
+      preview.style.display = 'block';
+      dropZone.style.display = 'none';
+      btnGenerate.disabled = false;
+    }
+
+    btnGenerate.addEventListener('click', startGeneration);
+
+    async function startGeneration() {
+      if (!selectedFile) return;
+      showScreen('generating');
+      genStatus.textContent = 'Uploading image...';
+      genProgressFill.style.width = '5%';
+
+      try {
+        // Upload
+        const buf = await selectedFile.arrayBuffer();
+        const uploadRes = await fetch('/api/upload', {
+          method: 'POST',
+          headers: { 'X-Filename': selectedFile.name },
+          body: buf,
+        });
+        const uploadData = await uploadRes.json();
+
+        // Start generation
+        genStatus.textContent = 'Starting world generation...';
+        genProgressFill.style.width = '10%';
+
+        const genRes = await fetch('/api/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            upload_id: uploadData.upload_id,
+            ext: uploadData.ext,
+            display_name: selectedFile.name.replace(/\.[^.]+$/, ''),
+          }),
+        });
+        const genData = await genRes.json();
+
+        // Poll
+        await pollGeneration(genData.gen_id);
+      } catch (err) {
+        genStatus.textContent = `Error: ${err.message}`;
+        genProgressFill.style.width = '0%';
+      }
+    }
+
+    const STATUS_PROGRESS = {
+      starting: 10, uploading: 20, generating: 35, polling: 45, downloading: 85, done: 100,
+    };
+    const STATUS_TEXT = {
+      starting: 'Starting...', uploading: 'Uploading image...',
+      generating: 'Generating world (this takes ~7 min)...',
+      polling: 'Waiting for generation to complete...',
+      downloading: 'Downloading assets...', done: 'Done!',
+    };
+
+    async function pollGeneration(genId) {
+      while (true) {
+        const res = await fetch(`/api/generate/${genId}`);
+        const data = await res.json();
+
+        const pct = STATUS_PROGRESS[data.status] || 10;
+        genProgressFill.style.width = `${pct}%`;
+        genStatus.textContent = STATUS_TEXT[data.status] || data.status;
+        if (data.last_log) genLog.textContent = data.last_log;
+
+        if (data.status === 'done' && data.world_id) {
+          currentWorldId = data.world_id;
+          genStatus.textContent = 'Loading game...';
+          genProgressFill.style.width = '100%';
+          await initGame(data.world_id);
+          return;
+        }
+        if (data.status === 'error') {
+          genStatus.textContent = `Error: ${data.error}`;
+          return;
+        }
+        await new Promise(r => setTimeout(r, 3000));
+      }
+    }
+
+    // ─── Game Init ───
+    async function initGame(worldId) {
+      // Load GaussianSplats3D
+      if (!GaussianSplats3D) {
+        GaussianSplats3D = await import(SPLAT_LIB_URL);
+      }
+
+      // Dispose previous viewer
+      if (splatViewer) {
+        try { splatViewer.dispose(); } catch (e) {}
+        splatViewer = null;
+        // Remove old canvases from viewer
+        document.querySelectorAll('canvas').forEach(c => c.remove());
+      }
+
+      // Create splat viewer (self-driven, no built-in controls)
+      splatViewer = new GaussianSplats3D.Viewer({
+        sharedMemoryForWorkers: false,
+        cameraUp: [0, -1, 0],
+        initialCameraPosition: [0, -2, -6],
+        initialCameraLookAt: [0, 0, 0],
+        useBuiltInControls: false,
+        antialiased: true,
+      });
+
+      const spzPath = `/worlds/${worldId}/world_500k.spz`;
+      await splatViewer.addSplatScene(spzPath, { progressiveLoad: true });
+      splatViewer.start();
+
+      // Access Three.js internals
+      const scene = splatViewer.threeScene;
+      const camera = splatViewer.camera;
+      const renderer = splatViewer.renderer;
+      const canvas = renderer.domElement;
+
+      // Lighting for GLB enemies
+      const ambient = new THREE.AmbientLight(0xffffff, 2);
+      scene.add(ambient);
+      const dirLight = new THREE.DirectionalLight(0xffffff, 1);
+      dirLight.position.set(5, -10, 5);
+      scene.add(dirLight);
+
+      // Load enemy GLB
+      const loader = new GLTFLoader();
+      const gltf = await loader.loadAsync('/assets/enemy.glb');
+      enemyTemplate = gltf.scene;
+      enemyTemplate.scale.setScalar(1.5);
+
+      // Reset camera
+      yaw = 0; // Face +Z (toward origin from z=-6)
+      pitch = 0;
+      camera.position.set(0, -2, -6);
+      updateCameraRotation(camera);
+
+      showScreen('ready');
+
+      // ─── Input ───
+      const onMouseMove = (e) => {
+        if (!gameActive || document.pointerLockElement !== canvas) return;
+        yaw += e.movementX * MOUSE_SENSITIVITY;
+        pitch += e.movementY * MOUSE_SENSITIVITY;
+        pitch = Math.max(-Math.PI / 2 + 0.05, Math.min(Math.PI / 2 - 0.05, pitch));
+        updateCameraRotation(camera);
+      };
+
+      const onClick = () => {
+        if (!gameActive) return;
+        if (document.pointerLockElement !== canvas) {
+          canvas.requestPointerLock();
+          return;
+        }
+        shoot(scene, camera);
+      };
+
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('click', onClick);
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('click', onClick);
+
+      // ─── Ready screen click ───
+      screens.ready.onclick = () => {
+        canvas.requestPointerLock();
+        startGame(scene, camera);
+      };
+
+      // ─── Retry ───
+      document.getElementById('btn-retry').onclick = () => {
+        resetGame(scene, camera);
+        showScreen('ready');
+      };
+      document.getElementById('btn-new').onclick = () => {
+        window.location.reload();
+      };
+
+      // ─── Game Loop ───
+      const clock = new THREE.Clock();
+      function gameLoop() {
+        requestAnimationFrame(gameLoop);
+        const delta = Math.min(clock.getDelta(), 0.1);
+        if (gameActive) {
+          updateElapsed(delta);
+          updateBullets(scene, delta);
+          updateEnemies(camera, delta);
+          checkCollisions(scene);
+          checkEnemyContact(scene, camera);
+          spawnTick(scene, camera, delta);
+        }
+      }
+      gameLoop();
+    }
+
+    function updateCameraRotation(camera) {
+      // Build forward direction from yaw/pitch
+      const forward = new THREE.Vector3(
+        Math.sin(yaw) * Math.cos(pitch),
+        Math.sin(pitch),
+        Math.cos(yaw) * Math.cos(pitch),
+      );
+      const target = camera.position.clone().add(forward);
+      // Splat world has ground at +Y, sky at -Y, so camera up = -Y
+      camera.up.set(0, -1, 0);
+      camera.lookAt(target);
+    }
+
+    // ─── Game Logic ───
+    function updateLivesDisplay() {
+      const full = '&#x2764;&#xFE0F;'.repeat(lives);
+      const empty = '&#x1F5A4;'.repeat(MAX_LIVES - lives);
+      livesDisplay.innerHTML = full + empty;
+    }
+
+    function startGame(scene, camera) {
+      resetGame(scene, camera);
+      gameActive = true;
+      showScreen(null);
+      crosshair.style.display = 'block';
+      scoreDisplay.style.display = 'block';
+      livesDisplay.style.display = 'block';
+      elapsedDisplay.style.display = 'block';
+
+      // Spawn 1 enemy to start
+      spawnEnemy(scene, camera);
+    }
+
+    function resetGame(scene, camera) {
+      gameActive = false;
+      score = 0;
+      lives = MAX_LIVES;
+      elapsed = 0;
+      spawnInterval = 4;
+      spawnTimer = 0;
+      scoreValue.textContent = '0';
+      elapsedValue.textContent = '0';
+      updateLivesDisplay();
+
+      for (const b of bullets) scene.remove(b);
+      bullets.length = 0;
+      for (const e of enemies) scene.remove(e);
+      enemies.length = 0;
+
+      crosshair.style.display = 'none';
+      scoreDisplay.style.display = 'none';
+      livesDisplay.style.display = 'none';
+      elapsedDisplay.style.display = 'none';
+
+      yaw = 0;
+      pitch = 0;
+      camera.position.set(0, -2, -6);
+      updateCameraRotation(camera);
+    }
+
+    let spawnTimer = 0;
+    function spawnTick(scene, camera, delta) {
+      spawnTimer += delta;
+      // Max enemies and spawn rate increase over time
+      const maxEnemies = Math.min(2 + Math.floor(elapsed / 15), 12);
+      spawnInterval = Math.max(1, 4 - elapsed * 0.03);
+
+      if (spawnTimer >= spawnInterval && enemies.length < maxEnemies) {
+        spawnEnemy(scene, camera);
+        spawnTimer = 0;
+      }
+    }
+
+    function spawnEnemy(scene, camera) {
+      const enemy = enemyTemplate.clone();
+
+      const angle = Math.random() * Math.PI * 2;
+      const dist = ENEMY_SPAWN_DISTANCE_MIN + Math.random() * (ENEMY_SPAWN_DISTANCE_MAX - ENEMY_SPAWN_DISTANCE_MIN);
+      const camPos = camera.position;
+
+      enemy.position.set(
+        camPos.x + Math.cos(angle) * dist,
+        camPos.y + (Math.random() * -4 - 1),
+        camPos.z + Math.sin(angle) * dist,
+      );
+
+      enemy.traverse((child) => {
+        if (child.isMesh) {
+          child.material = child.material.clone();
+          child.material.transparent = true;
+          child.material.depthWrite = false;
+          child.renderOrder = 1;
+        }
+      });
+
+      enemy.userData = {
+        orbitAngle: angle,
+        distance: dist,
+        baseY: enemy.position.y,
+        bobPhase: Math.random() * Math.PI * 2,
+        orbitSpeed: (0.2 + Math.random() * 0.4) * (Math.random() < 0.5 ? 1 : -1),
+        approachSpeed: 0.5 + Math.random() * 1.0,
+        centerX: camPos.x,
+        centerZ: camPos.z,
+        stealthTimer: 2 + Math.random() * 5,
+        stealthDuration: 1.5 + Math.random() * 2,
+        isStealth: false,
+      };
+
+      scene.add(enemy);
+      enemies.push(enemy);
+    }
+
+    function shoot(scene, camera) {
+      const geo = new THREE.SphereGeometry(0.08, 8, 8);
+      const mat = new THREE.MeshBasicMaterial({ color: 0x44aaff, emissive: 0x44aaff });
+      const bullet = new THREE.Mesh(geo, mat);
+
+      bullet.position.copy(camera.position);
+
+      const dir = new THREE.Vector3(0, 0, -1);
+      dir.applyQuaternion(camera.quaternion);
+
+      bullet.userData = {
+        velocity: dir.multiplyScalar(BULLET_SPEED),
+        lifetime: BULLET_LIFETIME,
+      };
+
+      // Muzzle flash (small light)
+      const flash = new THREE.PointLight(0x44aaff, 3, 5);
+      bullet.add(flash);
+      setTimeout(() => bullet.remove(flash), 50);
+
+      scene.add(bullet);
+      bullets.push(bullet);
+    }
+
+    function updateBullets(scene, delta) {
+      for (let i = bullets.length - 1; i >= 0; i--) {
+        const b = bullets[i];
+        const vel = b.userData.velocity;
+        b.position.x += vel.x * delta;
+        b.position.y += vel.y * delta;
+        b.position.z += vel.z * delta;
+        b.userData.lifetime -= delta;
+
+        if (b.userData.lifetime <= 0) {
+          scene.remove(b);
+          bullets.splice(i, 1);
+        }
+      }
+    }
+
+    function updateEnemies(camera, delta) {
+      for (const e of enemies) {
+        const d = e.userData;
+        d.bobPhase += delta * 2;
+        d.orbitAngle += delta * d.orbitSpeed;
+
+        // Slowly approach player
+        d.distance = Math.max(0, d.distance - delta * d.approachSpeed);
+
+        // Orbit around the player (not spawn point)
+        e.position.x = camera.position.x + Math.cos(d.orbitAngle) * d.distance;
+        e.position.z = camera.position.z + Math.sin(d.orbitAngle) * d.distance;
+        e.position.y = d.baseY + Math.sin(d.bobPhase) * 0.5;
+
+        // Stealth toggle
+        d.stealthTimer -= delta;
+        if (d.stealthTimer <= 0) {
+          d.isStealth = !d.isStealth;
+          d.stealthTimer = d.isStealth
+            ? d.stealthDuration
+            : 2 + Math.random() * 5;
+        }
+        const targetOpacity = d.isStealth ? 0 : 1;
+        const fadeSpeed = delta * 2;
+        e.traverse((child) => {
+          if (child.isMesh) {
+            const op = child.material.opacity + (targetOpacity - child.material.opacity) * Math.min(fadeSpeed, 1);
+            child.material.opacity = op;
+            child.material.depthWrite = op > 0.99;
+            child.visible = op > 0.01;
+          }
+        });
+
+        // Face camera
+        e.up.set(0, -1, 0);
+        e.lookAt(camera.position);
+      }
+    }
+
+    function checkCollisions(scene) {
+      for (let i = bullets.length - 1; i >= 0; i--) {
+        for (let j = enemies.length - 1; j >= 0; j--) {
+          const dist = bullets[i].position.distanceTo(enemies[j].position);
+          if (dist < ENEMY_HIT_RADIUS) {
+            // Hit!
+            scene.remove(bullets[i]);
+            scene.remove(enemies[j]);
+            bullets.splice(i, 1);
+            enemies.splice(j, 1);
+
+            score++;
+            scoreValue.textContent = score;
+
+            // Hit marker flash
+            hitMarker.style.opacity = '1';
+            setTimeout(() => { hitMarker.style.opacity = '0'; }, 150);
+
+            break;
+          }
+        }
+      }
+    }
+
+    function checkEnemyContact(scene, camera) {
+      for (let i = enemies.length - 1; i >= 0; i--) {
+        const dist = enemies[i].position.distanceTo(camera.position);
+        if (dist < ENEMY_CONTACT_RADIUS) {
+          scene.remove(enemies[i]);
+          enemies.splice(i, 1);
+          takeDamage(scene, camera);
+          if (!gameActive) return;
+        }
+      }
+    }
+
+    function takeDamage(scene, camera) {
+      lives--;
+      updateLivesDisplay();
+
+      // Red flash
+      damageFlash.style.opacity = '1';
+      setTimeout(() => { damageFlash.style.opacity = '0'; }, 300);
+
+      if (lives <= 0) {
+        gameActive = false;
+        document.exitPointerLock();
+        crosshair.style.display = 'none';
+        scoreDisplay.style.display = 'none';
+        livesDisplay.style.display = 'none';
+        elapsedDisplay.style.display = 'none';
+        finalScore.textContent = score;
+        showScreen('gameover');
+      }
+    }
+
+    function updateElapsed(delta) {
+      elapsed += delta;
+      elapsedValue.textContent = Math.floor(elapsed);
+    }
+  </script>
+</body>
+</html>
