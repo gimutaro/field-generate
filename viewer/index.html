@@ -206,6 +206,22 @@
     #screen-gameover .label { color: #666; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 2px; }
     .btn-group { display: flex; gap: 1rem; margin-top: 2rem; }
 
+    /* ═══ Clear ═══ */
+    #screen-clear {
+      background: rgba(0,0,0,0.85); z-index: 70;
+      text-align: center;
+    }
+    #screen-clear h1 {
+      font-size: 3.5rem; font-weight: 200; letter-spacing: 8px;
+      color: #4af; text-shadow: 0 0 40px rgba(74,170,255,0.5);
+      margin-bottom: 0.5rem;
+    }
+    .clear-message {
+      font-size: 1.1rem; color: #aaa; margin-bottom: 1.5rem;
+      font-style: italic; letter-spacing: 1px;
+    }
+    #screen-clear .final-score { font-size: 5rem; font-weight: 700; color: #4af; margin: 1rem 0; }
+
     /* ═══ Saved Worlds ═══ */
     .divider { color: #c09868; margin: 2rem 0 1.2rem; font-size: 1rem; letter-spacing: 2px; font-family: 'Caveat', cursive; font-weight: 600; }
     .worlds-grid {
@@ -280,7 +296,7 @@
   <!-- HUD -->
   <div id="hud">
     <div id="crosshair">+</div>
-    <div id="score-display">SCORE: <span id="score-value">0</span></div>
+    <div id="score-display">SCORE: <span id="score-value">0</span> / <span id="kill-target">10</span></div>
     <div id="lives-display" id="lives-value"></div>
     <div id="elapsed-display"><span id="elapsed-value">0</span>s</div>
     <div id="hit-marker">X</div>
@@ -289,12 +305,24 @@
 
   <!-- Game Over Screen -->
   <div id="screen-gameover" class="screen">
-    <h1>GAME OVER</h1>
+    <h1>YOU DIED</h1>
     <div class="label">Score</div>
     <div class="final-score" id="final-score">0</div>
     <div class="btn-group">
       <button id="btn-retry" class="btn btn-primary">Play Again</button>
       <button id="btn-new" class="btn btn-secondary">New World</button>
+    </div>
+  </div>
+
+  <!-- Clear Screen -->
+  <div id="screen-clear" class="screen">
+    <h1 id="clear-title">CLEAR</h1>
+    <div class="clear-message">All the ghosts are gone.</div>
+    <div class="label">Score</div>
+    <div class="final-score" id="clear-score">0</div>
+    <div class="btn-group">
+      <button id="btn-clear-retry" class="btn btn-primary">Play Again</button>
+      <button id="btn-clear-new" class="btn btn-secondary">New World</button>
     </div>
   </div>
 
@@ -315,12 +343,13 @@
 
     // ─── Config ───
     const MAX_LIVES = 3;
+    const KILL_TARGET = 10;
     const BULLET_SPEED = 40;
     const BULLET_LIFETIME = 3;
     const ENEMY_HIT_RADIUS = 1.2;
     const ENEMY_CONTACT_RADIUS = 3.5;
-    const ENEMY_SPAWN_DISTANCE_MIN = 18;
-    const ENEMY_SPAWN_DISTANCE_MAX = 28;
+    const ENEMY_SPAWN_DISTANCE_MIN = 8;
+    const ENEMY_SPAWN_DISTANCE_MAX = 15;
     const MOUSE_SENSITIVITY = 0.002;
 
     // ─── State ───
@@ -379,6 +408,7 @@
       generating: document.getElementById('screen-generating'),
       ready: document.getElementById('screen-ready'),
       gameover: document.getElementById('screen-gameover'),
+      clear: document.getElementById('screen-clear'),
     };
     const dropZone = document.getElementById('drop-zone');
     const fileInput = document.getElementById('file-input');
@@ -851,6 +881,13 @@
       document.getElementById('btn-new').onclick = () => {
         window.location.reload();
       };
+      document.getElementById('btn-clear-retry').onclick = () => {
+        resetGame(scene, camera);
+        showScreen('ready');
+      };
+      document.getElementById('btn-clear-new').onclick = () => {
+        window.location.reload();
+      };
 
       // ─── Game Loop ───
       const clock = new THREE.Clock();
@@ -902,8 +939,8 @@
       if (bgmHandle) { bgmHandle.source.stop(); bgmHandle = null; }
       bgmHandle = playSound('bgm', 0.4, true);
 
-      // Spawn 1 enemy to start
-      spawnEnemy(scene, camera);
+      // Spawn initial enemies
+      for (let i = 0; i < 16; i++) spawnEnemy(scene, camera);
     }
 
     function resetGame(scene, camera) {
@@ -916,6 +953,7 @@
       seTimer = 0;
       seNextInterval = 8 + Math.random() * 15;
       scoreValue.textContent = '0';
+      document.getElementById('kill-target').textContent = KILL_TARGET;
       elapsedValue.textContent = '0';
       updateLivesDisplay();
 
@@ -939,7 +977,7 @@
     function spawnTick(scene, camera, delta) {
       spawnTimer += delta;
       // Max enemies and spawn rate increase over time
-      const maxEnemies = Math.min(2 + Math.floor(elapsed / 15), 12);
+      const maxEnemies = Math.min(20 + Math.floor(elapsed / 8), 60);
       spawnInterval = Math.max(1, 4 - elapsed * 0.03);
 
       if (spawnTimer >= spawnInterval && enemies.length < maxEnemies) {
@@ -990,7 +1028,11 @@
       enemies.push(enemy);
     }
 
+    let lastShotTime = 0;
     function shoot(scene, camera) {
+      const now = performance.now();
+      if (now - lastShotTime < 500) return;
+      lastShotTime = now;
       const geo = new THREE.SphereGeometry(0.08, 8, 8);
       const mat = new THREE.MeshBasicMaterial({ color: 0x44aaff, emissive: 0x44aaff });
       const bullet = new THREE.Mesh(geo, mat);
@@ -1086,6 +1128,20 @@
             // Hit marker flash
             hitMarker.style.opacity = '1';
             setTimeout(() => { hitMarker.style.opacity = '0'; }, 150);
+
+            // Clear check
+            if (score >= KILL_TARGET) {
+              gameActive = false;
+              if (bgmHandle) { bgmHandle.source.stop(); bgmHandle = null; }
+              document.exitPointerLock();
+              crosshair.style.display = 'none';
+              scoreDisplay.style.display = 'none';
+              livesDisplay.style.display = 'none';
+              elapsedDisplay.style.display = 'none';
+              document.getElementById('clear-score').textContent = score;
+              showScreen('clear');
+              return;
+            }
 
             break;
           }
